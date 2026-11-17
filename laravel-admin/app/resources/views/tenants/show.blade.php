@@ -4,7 +4,7 @@
 <a href="{{ route('tenants.index') }}">← Tenants</a>
 <p class="eyebrow">TENANT WORKSPACE</p><h1>{{ $tenant->name }}</h1>
 <p>Routing context: <code>{{ $tenant->context }}</code></p>
-<section class="panel"><h2>PBX inventory</h2><p>Read-only views of accounts in this routing context. Credentials are never displayed.</p>
+<section class="panel"><h2>PBX inventory</h2><p>View accounts in this routing context. Tenant administrators can manage PJSIP records when provisioning is enabled. Credentials are never displayed.</p>
 <div class="actions">@foreach (['endpoints' => 'Endpoints', 'auths' => 'Authentication', 'aors' => 'AORs'] as $resource => $label)<a class="button secondary" href="{{ route('tenants.inventory', [$tenant, $resource]) }}">{{ $label }}</a>@endforeach</div>
 <p class="muted">New tenant contexts require dialplan routing before calls can be made. Registering this workspace changes administration metadata only.</p>
 </section>

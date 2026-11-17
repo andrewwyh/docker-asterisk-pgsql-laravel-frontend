@@ -17,8 +17,13 @@ class TenantInventory
 
     public function paginate(Tenant $tenant, string $resource): LengthAwarePaginator
     {
+        return $this->query($tenant, $resource)->orderBy('id')->paginate(25)->withQueryString();
+    }
+
+    public function query(Tenant $tenant, string $resource, string $connection = 'asterisk'): Builder
+    {
         $table = 'ps_'.$resource;
-        $query = DB::connection('asterisk')->table($table)->select(self::COLUMNS[$resource]);
+        $query = DB::connection($connection)->table($table)->select(self::COLUMNS[$resource]);
 
         if ($resource === 'endpoints') {
             $query->where('context', $tenant->context);
@@ -36,6 +41,6 @@ class TenantInventory
             });
         }
 
-        return $query->orderBy('id')->paginate(25)->withQueryString();
+        return $query;
     }
 }

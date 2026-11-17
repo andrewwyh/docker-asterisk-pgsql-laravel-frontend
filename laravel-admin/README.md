@@ -1,6 +1,6 @@
 # Independent Asterisk administration
 
-Phase 3 foundation: Laravel 13, PHP 8.5, nginx, administrator authentication, and health checks. Tenant workspaces and scoped read-only PBX inventory are available; SIP provisioning is a later phase. No changes to the parent PBX deployment are required.
+Phase 4 administration: Laravel 13, PHP 8.5, nginx, administrator authentication, and health checks. Tenant workspaces, scoped inventory, and tenant-aware PJSIP CRUD are available. Dialplan routing and trunks are later phases. No changes to the parent PBX deployment are required.
 
 ## First start
 
@@ -23,7 +23,7 @@ The administrator command prompts for name, email, and a hidden password (minimu
 
 The default connection, user model, and existing migrations are pinned to SQLite. Accounts, sessions, and login rate limits live there. No live PBX credentials are copied from the parent repository. The app has no Asterisk mounts, Docker socket mount, or external PBX network attachment.
 
-The separately named `asterisk` connection uses REALTIME_DB_HOST as a DNS name or IP address. Set REALTIME_DB_PORT, REALTIME_DB_DATABASE, REALTIME_DB_USERNAME, REALTIME_DB_PASSWORD, and REALTIME_DB_SSLMODE privately in `.env`. The deployed connection must use the PBX host's reachable private/Tailscale address, not a Docker service name. The dashboard attempts a simple connection check only when REALTIME_ENABLED=true; failures display a generic status rather than connection details.
+The separately named `asterisk` connection uses REALTIME_DB_HOST as a DNS name or IP address. Set REALTIME_DB_PORT, REALTIME_DB_DATABASE, REALTIME_DB_USERNAME, REALTIME_DB_PASSWORD, and REALTIME_DB_SSLMODE privately in `.env`. The deployed connection must use the PBX host's reachable private/Tailscale address, not a Docker service name. The dashboard checks the read-only inventory connection only when REALTIME_ENABLED=true; failures display a generic status rather than connection details.
 
 The application requests read-only PostgreSQL sessions with a three-second statement timeout. This is a guardrail, not a substitute for database privileges: use a restricted role, never the PBX superuser. The optional PBX-side `docker-compose.remote.yml` adds a private interface publication while retaining loopback access. A restricted reader role must have CONNECT on the PBX database, USAGE on public, and column-level SELECT on only the inventory fields of ps_endpoints, ps_auths, and ps_aors (see the fixture reader grants in tests/fixtures/02-tenants.sql). No schema changes are required. Keep Tailscale access rules restricted to the administration host; never use a public bind address for PostgreSQL. No PBX table migrations are provided. Never target framework migrations at the `asterisk` connection.
 
@@ -55,7 +55,7 @@ Back up the application SQLite database and encryption key together before an up
 
 ## Tenants and access
 
-Open **Tenants** after signing in. Platform administrators can register tenant workspaces and manage memberships. Tenant administrators can read their tenant's inventory and change its display name; viewers can only read. Context identifiers are unique, immutable, and limited to 32 characters: a lowercase initial letter followed by lowercase letters, digits, or hyphens. Underscores are reserved for future SIP identities such as `100_abc`. The combined identity will need to fit the existing 40-character authentication username limit.
+Open **Tenants** after signing in. Platform administrators can register tenant workspaces and manage memberships. Tenant administrators can change their tenant's display name and manage its PJSIP records when provisioning is enabled; viewers can only read. Context identifiers are unique, immutable, and limited to 32 characters: a lowercase initial letter followed by lowercase letters, digits, or hyphens. Underscores are reserved for future SIP identities such as `100_abc`. The combined identity will need to fit the existing 40-character authentication username limit.
 
 Tenant registration requires confirmation of ownership of the selected PBX context. Register context `default` explicitly if you want the existing legacy endpoint visible in a workspace. There is no automatic tenant creation, account renaming, or data import. New contexts will not carry calls until their Realtime dialplan wiring is configured in a later phase.
 
@@ -82,4 +82,32 @@ This can recreate PostgreSQL; Asterisk's existing loopback publication is retain
 
 ## Remaining phases
 
-PJSIP CRUD, Realtime context routing, dialplan management, and external trunks remain. The PBX connection stays read-only until provisioning is implemented and tested.
+Realtime context routing, dialplan management, and external trunks remain. Inventory remains read-only; provisioning uses a separately enabled writer connection.
+
+## Phase 4: PJSIP management
+
+Inventory continues using `asterisk`, with its column-restricted reader role. Configure a second non-superuser login using `REALTIME_WRITE_DB_USERNAME` and `REALTIME_WRITE_DB_PASSWORD`, then set `REALTIME_WRITES_ENABLED=true`. Enable this only after applying `database/pjsip-writer-grants.sql` as the PBX database owner with `psql -v writer_role=YOUR_ROLE`. The grants file changes privileges only. The writer role needs LOGIN, CONNECT, and the supplied grants; it must not own the database or schema and must not have superuser, role creation, database creation, replication, or bypass-RLS privileges. Disable PostgreSQL statement/parameter logging for this role when handling SIP credentials. Use native prepared statements as configured.
+
+The writer can insert/delete the three PJSIP tables and update only the permitted columns; it cannot update endpoint IDs/contexts, change schema, edit the dialplan, or mutate runtime contacts. SELECT on the three tables supports PostgreSQL row-version checks; the application explicitly selects safe columns plus `xmin`, never stored credentials. The separate inventory reader still cannot read credential columns. Writer queries and errors containing bound credentials are not logged or returned to the browser. Keep debug tooling and SQL query logging disabled on credential workflows.
+
+After changing the environment or image, run `docker compose build app web` and `docker compose up -d --force-recreate app web`. Existing application volumes and sessions are retained. There are no Phase 4 database schema migrations.
+
+### Create and edit
+
+Open a tenant workspace, then **Endpoints → Create SIP account**. A numeric local extension such as `100` becomes `100_abc` in context `abc`. Leading zeroes are preserved. The combined identity is capped at 40 characters, matching the existing authentication username column. An endpoint, userpass authentication record, and AOR are created in one PostgreSQL transaction. Configure the phone's SIP identity and authentication username with the full suffixed ID. No dialplan rows or context wiring are added, so tenant-local dialing remains a later phase.
+
+Authentication and AOR pages also have creation forms. A new record must be attached to an existing endpoint in the same tenant; creation and reference addition occur in the same transaction. Record names receive the tenant suffix. New auths use userpass; a blank username uses the generated auth ID. This keeps ownership explicit without adding a PBX schema or creating unattached records. Orphan/shared records are outside these tenant workflows.
+
+Edits keep IDs and contexts immutable and preserve unlisted settings. Blank optional settings explicitly clear that field to NULL; omitted fields stay unchanged. Blank password fields preserve the existing credential. Explicit replacement requires confirmation and 12–80 characters; it is supported for userpass authentication only and clears obsolete stored digests. Passwords are stored in Asterisk's required format, not Laravel administrator-password hashes. Existing passwords are never sent to the form or flashed back after errors. `REALTIME_TRANSPORTS` lists the allowed static transport names; configure it for the PBX. Codec names must match installed PBX support.
+
+Encrypted form tokens bind the tenant, resource, identity, PostgreSQL row version, and a one-hour expiry. Stale updates, password-only concurrent changes, changed deletion dependencies, and cross-resource token reuse are rejected. Short table locks serialize writes to the three PJSIP configuration tables while allowing normal reads. Lock and statement timeouts bound waiting. External configuration writers should coordinate with this administration interface; this is not database-enforced multi-tenancy or a replacement for foreign keys. External dialplan/trunk writers and runtime contact changes can race dependency checks because those tables remain outside this writer's control.
+
+### Deletion
+
+Choose **Review deletion**, inspect the listed records, type the exact identity, and check the approval box. The transaction rechecks the form version, ownership, references, and dependencies before deleting anything.
+
+Deleting an endpoint removes its exclusively linked auths/AORs in the same transaction. Shared records, active contacts, literal dialplan references, IP identifiers, and outbound registration dependencies block the operation. Dialplan reference detection is conservative for literal IDs; generated/dynamic references cannot be determined reliably from database text alone. Unregister phones before deleting accounts. Deleting an individual auth/AOR removes its endpoint reference, but is blocked if shared or the last record in a required reference. Runtime contacts and Realtime extensions are never deleted by these workflows.
+
+### Audit outcomes
+
+SQLite audit entries contain actor, tenant, resource ID, operation ID, and status only, with no credentials. A pending intent is recorded before the PostgreSQL transaction. Successful PBX commits are marked `committed`; failures or an uncertain connection outcome are recorded separately. PostgreSQL changes across the three PJSIP tables are atomic, but SQLite audit completion is not a distributed transaction. If completion cannot be confirmed, refresh inventory before retrying rather than repeating the operation blindly. No automatic write retries are performed.

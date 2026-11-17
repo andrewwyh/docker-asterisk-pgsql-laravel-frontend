@@ -11,6 +11,8 @@ services:
     volumes:
       - ./tests/fixtures/asterisk-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./tests/fixtures/02-tenants.sql:/docker-entrypoint-initdb.d/02-tenants.sql:ro
+      - ./tests/fixtures/03-writer.sql:/docker-entrypoint-initdb.d/03-writer.sql:ro
+      - ./database/pjsip-writer-grants.sql:/opt/pjsip-writer-grants.sql:ro
     healthcheck:
       test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U fixture -d realtime_fixture]
       interval: 2s

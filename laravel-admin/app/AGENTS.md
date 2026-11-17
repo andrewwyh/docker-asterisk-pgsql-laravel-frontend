@@ -6,12 +6,14 @@ This is an independent Laravel 13 application, deployed with ../compose.yml. PHP
 
 - Preserve the parent Asterisk/PostgreSQL deployment and its live data.
 - SQLite is the application database. Keep users and framework migrations explicitly on SQLite.
-- The named `asterisk` PostgreSQL connection is disabled by default and read-only for Phase 3.
+- The named `asterisk` PostgreSQL connection is disabled by default and always read-only.
 - Never copy live credentials into source, logs, tests, or examples.
 - Production PBX access uses an explicitly configured DNS/IP address, ultimately through Tailscale.
 - Tenant records, roles, and audit metadata live in SQLite. Authorize tenant access before every PBX query.
 - Existing Phase 2 users retain platform access through the upgrade migration. New users default to no platform access.
-- SIP CRUD, dialplan editing, and trunks are later phases.
+- Phase 4 uses a separate asterisk_write connection and explicit writes-enabled flag for PJSIP CRUD. Keep credentials out of queries returned to browsers, logs, sessions, and audit details.
+- All PBX mutations require tenant policy authorization, a short PostgreSQL transaction, and stale-form verification for updates/deletes. Never change IDs or contexts in an update.
+- Dialplan editing and trunks are later phases.
 
 ## Development
 

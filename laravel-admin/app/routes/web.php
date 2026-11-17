@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PjsipController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantInventoryController;
 use App\Http\Controllers\TenantMemberController;
@@ -18,5 +19,13 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/tenants/{tenant}/members', [TenantMemberController::class, 'store'])->name('tenants.members.store');
     Route::delete('/tenants/{tenant}/members/{user}', [TenantMemberController::class, 'destroy'])->name('tenants.members.destroy');
     Route::get('/tenants/{tenant}/inventory/{resource}', TenantInventoryController::class)->whereIn('resource', ['endpoints', 'auths', 'aors'])->name('tenants.inventory');
+    Route::prefix('/tenants/{tenant}/pjsip/{resource}')->whereIn('resource', ['endpoints', 'auths', 'aors'])->group(function (): void {
+        Route::get('/create', [PjsipController::class, 'create'])->name('pjsip.create');
+        Route::post('/', [PjsipController::class, 'store'])->name('pjsip.store');
+        Route::get('/{record}/edit', [PjsipController::class, 'edit'])->name('pjsip.edit');
+        Route::patch('/{record}', [PjsipController::class, 'update'])->name('pjsip.update');
+        Route::get('/{record}/delete', [PjsipController::class, 'delete'])->name('pjsip.delete');
+        Route::delete('/{record}', [PjsipController::class, 'destroy'])->name('pjsip.destroy');
+    });
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });

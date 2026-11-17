@@ -22,6 +22,11 @@ class TenantPolicy
         return $user->is_platform_admin || $tenant->members()->whereKey($user->id)->wherePivot('role', 'admin')->exists();
     }
 
+    public function managePjsip(User $user, Tenant $tenant): bool
+    {
+        return $this->update($user, $tenant);
+    }
+
     public function manageMembers(User $user, Tenant $tenant): bool
     {
         return $user->is_platform_admin;

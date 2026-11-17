@@ -20,6 +20,13 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen(ConnectionEstablished::class, function (ConnectionEstablished $event): void {
+            if ($event->connection->getName() === 'asterisk_write') {
+                if (! config('realtime.enabled') || ! config('realtime.writes_enabled')) {
+                    throw new LogicException('PBX writes are disabled.');
+                }
+                $event->connection->disableQueryLog();
+            }
+
             if ($event->connection->getName() === 'asterisk') {
                 if (! config('realtime.enabled')) {
                     throw new LogicException('Realtime access is disabled.');
