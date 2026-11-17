@@ -1,0 +1,33 @@
+name: asterisk-admin-tests
+services:
+  pbx-fixture:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: realtime_fixture
+      POSTGRES_USER: fixture
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./tests/fixtures/asterisk-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fixture -d realtime_fixture]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [isolated]
+  test:
+    build:
+      context: .
+      target: development
+    environment:
+      APP_ENV: testing
+      REALTIME_INTEGRATION: "true"
+    depends_on:
+      pbx-fixture:
+        condition: service_healthy
+    command: [php, vendor/bin/phpunit]
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true

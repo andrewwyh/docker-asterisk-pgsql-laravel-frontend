@@ -1,0 +1,55 @@
+name: asterisk-admin
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/lib/laravel/database.sqlite
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      LOG_CHANNEL: stderr
+    volumes:
+      - application-data:/var/lib/laravel
+    networks: [admin]
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${ADMIN_HTTP_PORT:-8080}:8080"
+    networks: [admin]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/up]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  test:
+    profiles: [test]
+    build:
+      context: .
+      target: development
+    environment:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      DB_DATABASE: ':memory:'
+      REALTIME_ENABLED: "false"
+    entrypoint: []
+    command: [php, artisan, test, --compact]
+    networks: [admin]
+
+networks:
+  admin:
+volumes:
+  application-data:

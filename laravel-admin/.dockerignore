@@ -1,0 +1,11 @@
+**/.env
+**/.env.*
+!**/.env.example
+app/vendor
+app/node_modules
+app/storage/logs/*
+app/bootstrap/cache/*.php
+app/database/*.sqlite*
+.git
+
+!app/.env.testing
