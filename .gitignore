@@ -1,0 +1,5 @@
+.env
+data/
+
+# Contains the PostgreSQL password
+asterisk/config/res_pgsql.conf

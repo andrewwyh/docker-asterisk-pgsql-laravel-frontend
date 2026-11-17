@@ -1,0 +1,54 @@
+
+services:
+
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    container_name: asterisk-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    # Expose PostgreSQL only on the host loopback interface.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+      args:
+        ASTERISK_VERSION: ${ASTERISK_VERSION}
+
+    image: local/asterisk:${ASTERISK_VERSION}
+    container_name: asterisk-pbx
+    restart: unless-stopped
+
+    network_mode: host
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - ./asterisk/config:/etc/asterisk
+      - ./data/asterisk/log:/var/log/asterisk
+      - ./data/asterisk/spool:/var/spool/asterisk
+      - ./data/asterisk/lib:/var/lib/asterisk
+
+    stop_grace_period: 30s
+
