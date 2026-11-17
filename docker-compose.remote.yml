@@ -1,0 +1,7 @@
+# Optional: keep loopback access and add a private/Tailscale publication.
+# Set PBX_PRIVATE_BIND_ADDRESS in the PBX project's ignored .env file.
+# Start with both files: docker compose -f docker-compose.yml -f docker-compose.remote.yml up -d
+services:
+  postgres:
+    ports:
+      - "${PBX_PRIVATE_BIND_ADDRESS:?Set the PBX host private or Tailscale IP}:5432:5432"

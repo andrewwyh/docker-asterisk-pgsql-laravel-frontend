@@ -9,9 +9,14 @@
 <body>
 <header><a class="brand" href="{{ route('dashboard') }}">Asterisk <span>Administration</span></a>
     @auth
+        <a href="{{ route('tenants.index') }}">Tenants</a>
         <form method="post" action="{{ route('logout') }}">@csrf<button class="secondary" type="submit">Sign out</button></form>
     @endauth
 </header>
-<main>@yield('content')</main>
+<main>
+@if (session('status'))<p class="notice" role="status">{{ session('status') }}</p>@endif
+@if ($errors->any())<div class="error" role="alert"><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+@yield('content')
+</main>
 </body>
 </html>

@@ -10,8 +10,9 @@ services:
       - /var/lib/postgresql/data
     volumes:
       - ./tests/fixtures/asterisk-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./tests/fixtures/02-tenants.sql:/docker-entrypoint-initdb.d/02-tenants.sql:ro
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U fixture -d realtime_fixture]
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U fixture -d realtime_fixture]
       interval: 2s
       timeout: 3s
       retries: 30

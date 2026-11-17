@@ -22,7 +22,7 @@ class RealtimeConnectionTest extends TestCase
             'realtime.enabled' => true,
             'database.connections.asterisk.host' => 'pbx-fixture',
             'database.connections.asterisk.database' => 'realtime_fixture',
-            'database.connections.asterisk.username' => 'fixture',
+            'database.connections.asterisk.username' => 'fixture_reader',
             'database.connections.asterisk.password' => '',
         ]);
         $this->assertSame('connected (read only)', app(RealtimeStatus::class)->check());
@@ -31,6 +31,9 @@ class RealtimeConnectionTest extends TestCase
         $this->assertTrue($connection->getSchemaBuilder()->hasTable('ps_endpoints'));
         $this->assertFalse($connection->getSchemaBuilder()->hasTable('users'));
         $this->assertFalse($connection->getSchemaBuilder()->hasTable('migrations'));
+        $privileges = $connection->selectOne("SELECT has_column_privilege(current_user, 'public.ps_auths', 'password', 'SELECT') AS credentials, has_table_privilege(current_user, 'public.ps_endpoints', 'UPDATE') AS writes");
+        $this->assertFalse($privileges->credentials);
+        $this->assertFalse($privileges->writes);
 
         try {
             $connection->insert("INSERT INTO extensions (context, exten, priority, app, appdata) VALUES ('fixture', '100', 1, 'Hangup', '')");
