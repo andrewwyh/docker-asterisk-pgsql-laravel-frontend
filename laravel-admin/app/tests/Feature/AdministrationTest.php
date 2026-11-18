@@ -104,4 +104,26 @@ class AdministrationTest extends TestCase
         $user = User::where('email', 'admin@example.com')->firstOrFail();
         $this->assertTrue(Hash::check('a-private-test-password', $user->password));
     }
+
+    public function test_trusted_proxy_generates_https_assets_and_form_actions(): void
+    {
+        config(['trustedproxy.proxies' => ['192.0.2.10']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.10'])
+            ->withHeaders(['X-Forwarded-Proto' => 'https'])
+            ->get('http://admin.example.test/login')->assertOk()
+            ->assertSee('https://admin.example.test/admin.css', false)
+            ->assertSee('https://admin.example.test/login', false)
+            ->assertDontSee('http://admin.example.test/', false);
+    }
+
+    public function test_untrusted_clients_cannot_spoof_https_or_forwarded_host(): void
+    {
+        config(['trustedproxy.proxies' => ['192.0.2.10']]);
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.20'])
+            ->withHeaders(['X-Forwarded-Proto' => 'https', 'X-Forwarded-Host' => 'attacker.example.test'])
+            ->get('http://admin.example.test/login')->assertOk()
+            ->assertSee('http://admin.example.test/admin.css', false)
+            ->assertDontSee('https://admin.example.test/admin.css', false)
+            ->assertDontSee('attacker.example.test', false);
+    }
 }

@@ -111,3 +111,11 @@ Deleting an endpoint removes its exclusively linked auths/AORs in the same trans
 ### Audit outcomes
 
 SQLite audit entries contain actor, tenant, resource ID, operation ID, and status only, with no credentials. A pending intent is recorded before the PostgreSQL transaction. Successful PBX commits are marked `committed`; failures or an uncertain connection outcome are recorded separately. PostgreSQL changes across the three PJSIP tables are atomic, but SQLite audit completion is not a distributed transaction. If completion cannot be confirmed, refresh inventory before retrying rather than repeating the operation blindly. No automatic write retries are performed.
+
+## HTTPS through Tailscale Serve
+
+On the administration host, run `tailscale serve --bg --https=443 http://127.0.0.1:8080`. HTTPS terminates at Tailscale; the local upstream stays HTTP. Set APP_URL to the host's full https://…ts.net URL, SESSION_SECURE_COOKIE=true, and ADMIN_BIND_ADDRESS=127.0.0.1 in the administration .env. Access the UI through its HTTPS URL, rather than direct HTTP, when secure cookies are enabled.
+
+Set TRUSTED_PROXIES to the gateway IP of the administration Docker network (find it with `docker network inspect asterisk-admin_admin`). Host-originated proxy traffic reaches nginx from this gateway. Laravel trusts X-Forwarded-Proto and X-Forwarded-For only from the configured addresses, and does not trust forwarded host headers. Update the setting if the network is recreated with a different subnet. For a different reverse-proxy topology, configure the actual source addresses instead of trusting all clients.
+
+Rebuild app/web after code changes and recreate both services after environment changes. Use `tailscale serve status` to find the HTTPS URL. If a foreground Serve command already owns port 443, stop it with Ctrl-C before starting the background command. No Tailscale Funnel configuration is needed.
