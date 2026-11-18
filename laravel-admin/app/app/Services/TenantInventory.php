@@ -15,9 +15,14 @@ class TenantInventory
         'aors' => ['id', 'max_contacts', 'default_expiration', 'maximum_expiration', 'qualify_frequency'],
     ];
 
-    public function paginate(Tenant $tenant, string $resource): LengthAwarePaginator
+    public function paginate(Tenant $tenant, string $resource, bool $showPasswords = false): LengthAwarePaginator
     {
-        return $this->query($tenant, $resource)->orderBy('id')->paginate(25)->withQueryString();
+        $query = $this->query($tenant, $resource, $showPasswords ? 'asterisk_write' : 'asterisk');
+        if ($showPasswords) {
+            $query->addSelect('password');
+        }
+
+        return $query->orderBy('id')->paginate(25)->withQueryString();
     }
 
     public function query(Tenant $tenant, string $resource, string $connection = 'asterisk'): Builder

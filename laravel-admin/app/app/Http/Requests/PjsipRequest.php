@@ -57,8 +57,10 @@ class PjsipRequest extends FormRequest
                 $rules[$field] = array_merge(['sometimes'], $constraints);
             }
         }
-        if ($resource === 'auths' || ($creating && $resource === 'endpoints')) {
-            $rules['password'] = [$creating ? 'required' : 'nullable', 'string', 'min:12', 'max:80', 'confirmed', 'not_regex:/[\x00-\x1f\x7f]/'];
+        if ($creating && in_array($resource, ['auths', 'endpoints'], true)) {
+            $rules['password'] = ['required', ...PjsipManager::PASSWORD_RULES, 'confirmed'];
+        } elseif ($resource === 'auths') {
+            $rules['password'] = ['nullable', 'string'];
         }
 
         return $rules;

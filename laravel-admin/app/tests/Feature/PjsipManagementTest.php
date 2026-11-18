@@ -143,10 +143,23 @@ class PjsipManagementTest extends TestCase
         $this->assertSame('<00201>', $endpoint->callerid);
         $this->assertSame(2, $db->table('ps_aors')->where('id', $id)->value('max_contacts'));
         $this->assertSame('private-new-sip-password', $db->table('ps_auths')->where('id', $id)->value('password'));
-        $this->get(route('pjsip.edit', [$this->tenant, 'auths', $id]))->assertOk()->assertDontSee('private-new-sip-password');
+        $this->get(route('pjsip.edit', [$this->tenant, 'auths', $id]))->assertOk()
+            ->assertSee('name="password" type="text" value="private-new-sip-password"', false)
+            ->assertDontSee('password_confirmation');
+        $this->get(route('pjsip.edit', [$this->tenant, 'endpoints', $id]))->assertOk()->assertDontSee('private-new-sip-password');
         $this->get(route('pjsip.edit', [$this->tenant, 'endpoints', $id]))->assertOk();
         $this->get(route('pjsip.delete', [$this->tenant, 'endpoints', $id]))->assertOk()->assertSee('Review deletion');
         $this->assertStringNotContainsString('private-new-sip-password', DB::connection('sqlite')->table('audit_events')->value('details'));
+
+        $inventory = route('tenants.inventory', [$this->tenant, 'auths']);
+        $this->get($inventory)->assertOk()
+            ->assertSee('<th>Id</th><th>Password</th>', false)
+            ->assertSee('<td>00201_abc</td><td>private-new-sip-password</td>', false);
+        $viewer = User::factory()->create();
+        $this->tenant->members()->attach($viewer, ['role' => 'viewer']);
+        $this->actingAs($viewer)->get($inventory)->assertOk()
+            ->assertDontSee('<th>Password</th>', false)
+            ->assertDontSee('fixture-private-auth-password');
     }
 
     public function test_a_failure_after_auth_creation_rolls_back_all_pbx_records(): void
@@ -165,10 +178,14 @@ class PjsipManagementTest extends TestCase
     {
         $db = $this->fixture();
         $id = $this->createAccount();
-        $token = $this->snapshot('auths', $id);
-        $this->patch(route('pjsip.update', [$this->tenant, 'auths', $id]), ['version_token' => $token, 'realm' => 'example.test', 'password' => '', 'password_confirmation' => ''])->assertSessionHasNoErrors();
-        $this->assertSame('private-new-sip-password', $db->table('ps_auths')->where('id', $id)->value('password'));
-        $this->patch(route('pjsip.update', [$this->tenant, 'auths', $id]), ['version_token' => $this->snapshot('auths', $id), 'password' => 'replacement-sip-password', 'password_confirmation' => 'replacement-sip-password'])->assertSessionHasNoErrors();
+        $db->table('ps_auths')->where('id', $id)->update(['password' => 'legacy']);
+        $url = route('pjsip.update', [$this->tenant, 'auths', $id]);
+        $this->patch($url, ['version_token' => $this->snapshot('auths', $id), 'realm' => 'example.test', 'password' => 'legacy'])->assertSessionHasNoErrors();
+        $this->assertSame('legacy', $db->table('ps_auths')->where('id', $id)->value('password'));
+        $this->patch($url, ['version_token' => $this->snapshot('auths', $id), 'password' => 'short'])->assertSessionHasErrors('password');
+        $this->assertArrayNotHasKey('password', session()->getOldInput());
+        $this->assertSame('legacy', $db->table('ps_auths')->where('id', $id)->value('password'));
+        $this->patch($url, ['version_token' => $this->snapshot('auths', $id), 'password' => 'replacement-sip-password'])->assertSessionHasNoErrors();
         $this->assertSame('replacement-sip-password', $db->table('ps_auths')->where('id', $id)->value('password'));
         $endpoint = $db->table('ps_endpoints')->where('id', $id)->first();
         $this->patch(route('pjsip.update', [$this->tenant, 'endpoints', $id]), ['version_token' => $this->snapshot('endpoints', $id), 'callerid' => 'New caller'])->assertSessionHasNoErrors();

@@ -9,11 +9,14 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use PDOException;
 
 class PjsipManager
 {
+    public const PASSWORD_RULES = ['string', 'min:12', 'max:80', 'not_regex:/[\x00-\x1f\x7f]/'];
+
     public const FIELDS = [
         'endpoints' => ['transport', 'allow', 'disallow', 'callerid', 'direct_media', 'rtp_symmetric', 'force_rport', 'rewrite_contact'],
         'auths' => ['username', 'realm'],
@@ -33,12 +36,15 @@ class PjsipManager
         return DB::connection('asterisk_write');
     }
 
-    public function record(Tenant $tenant, string $resource, string $id): object
+    public function record(Tenant $tenant, string $resource, string $id, bool $includePassword = false): object
     {
         $this->authorize($tenant);
 
         try {
             $columns = array_unique(array_merge(TenantInventory::COLUMNS[$resource], self::FIELDS[$resource]));
+            if ($includePassword && $resource === 'auths') {
+                $columns[] = 'password';
+            }
 
             return $this->inventory->query($tenant, $resource, 'asterisk_write')
                 ->select($columns)->selectRaw('xmin::text AS row_version')->where('id', $id)->firstOrFail();
@@ -170,14 +176,16 @@ class PjsipManager
     public function update(Tenant $tenant, string $resource, string $id, array $input): void
     {
         $this->mutate($tenant, $resource, $id, 'updated', function () use ($tenant, $resource, $id, $input): void {
-            $record = $this->record($tenant, $resource, $id);
+            $record = $this->record($tenant, $resource, $id, includePassword: true);
             $this->verify($tenant, $resource, $record, $input['version_token']);
             $values = $this->values($resource, $input);
-            if ($resource === 'auths' && ! empty($input['password'])) {
+            $password = $input['password'] ?? '';
+            if ($resource === 'auths' && $password !== '' && $password !== $record->password) {
                 if ($record->auth_type !== 'userpass') {
                     throw ValidationException::withMessages(['password' => 'Password replacement is supported only for userpass authentication.']);
                 }
-                $values += ['password' => $input['password'], 'md5_cred' => null, 'password_digest' => null];
+                Validator::make(['password' => $password], ['password' => ['required', ...self::PASSWORD_RULES]])->validate();
+                $values += ['password' => $password, 'md5_cred' => null, 'password_digest' => null];
             }
             if ($resource === 'aors') {
                 $this->aorValues(array_replace((array) $record, $values));
