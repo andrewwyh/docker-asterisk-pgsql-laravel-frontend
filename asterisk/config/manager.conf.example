@@ -1,0 +1,18 @@
+; Manual setup required: this example is NOT loaded as manager.conf.
+; Copy to manager.conf (gitignored), generate your own random secret, and
+; replace ALL REPLACE_WITH_* values before changing enabled to yes.
+; Generate a secret locally: python3 -c 'import secrets; print(secrets.token_hex(32))'
+; Use the same generated secret as PHONE_AMI_SECRET in laravel-admin/.env.
+[general]
+enabled = no
+webenabled = no
+port = 5038
+bindaddr = REPLACE_WITH_PBX_TAILSCALE_IP
+displayconnects = no
+
+[phone-provisioning]
+secret = REPLACE_WITH_RANDOM_AMI_SECRET
+deny = 0.0.0.0/0.0.0.0
+permit = REPLACE_WITH_ADMIN_SOURCE_IP/255.255.255.255
+read = none
+write = system
