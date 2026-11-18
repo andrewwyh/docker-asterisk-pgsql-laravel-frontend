@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DialplanController;
+use App\Http\Controllers\PhoneController;
 use App\Http\Controllers\PjsipController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantInventoryController;
@@ -10,6 +11,9 @@ use App\Http\Controllers\TenantMemberController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
+Route::get('/provision/{token}/{filename}', [PhoneController::class, 'profile'])
+    ->where('token', '[a-f0-9]{64}')->where('filename', '[A-Fa-f0-9]{12}\.(xml|cfg)')
+    ->name('phones.profile');
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:20,1')->name('login.store');
@@ -37,6 +41,11 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/{extension}', [DialplanController::class, 'submit'])->whereNumber('extension')->name('dialplan.update');
         Route::get('/{extension}/delete', [DialplanController::class, 'delete'])->whereNumber('extension')->name('dialplan.delete');
         Route::delete('/{extension}', [DialplanController::class, 'destroy'])->whereNumber('extension')->name('dialplan.destroy');
+    });
+    Route::scopeBindings()->group(function (): void {
+        Route::resource('tenants.phones', PhoneController::class)->except('show');
+        Route::post('/tenants/{tenant}/phones/{phone}/reboot', [PhoneController::class, 'reboot'])
+            ->middleware('throttle:5,1')->name('tenants.phones.reboot');
     });
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });

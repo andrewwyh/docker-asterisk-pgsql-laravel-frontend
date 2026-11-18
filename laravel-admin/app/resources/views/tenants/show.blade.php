@@ -9,6 +9,7 @@
 <p class="muted">Use the dialplan page to provision local routes. Newly introduced contexts also require synchronization on the PBX host. Registering a workspace changes administration metadata only.</p>
 </section>
 <section class="panel"><h2>Dialplan</h2><p>Manage tenant-local routes and test numbers.</p><a class="button secondary" href="{{ route('dialplan.index', $tenant) }}">Open dialplan</a></section>
+<section class="panel"><h2>Phones</h2><p>Provision Flyingvoice handsets assigned to this context.</p><a class="button secondary" href="{{ route('tenants.phones.index', $tenant) }}">Open phones</a></section>
 @can('update', $tenant)
 <section class="panel form-panel"><h2>Tenant name</h2><form method="post" action="{{ route('tenants.update', $tenant) }}">@csrf @method('PATCH')
 <label for="name">Name</label><input id="name" name="name" value="{{ old('name', $tenant->name) }}" maxlength="120" required><button type="submit">Save name</button>
