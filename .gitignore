@@ -3,3 +3,6 @@ data/
 
 # Contains the PostgreSQL password
 asterisk/config/res_pgsql.conf
+
+# Generated PBX routing contexts; regenerate on the PBX host.
+asterisk/config/realtime-contexts.conf

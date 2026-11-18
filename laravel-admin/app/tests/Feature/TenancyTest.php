@@ -42,7 +42,7 @@ class TenancyTest extends TestCase
     public function test_context_validation_rejects_ambiguous_identifiers_duplicates_and_unconfirmed_ownership(): void
     {
         $this->actingAs($this->platformAdmin());
-        foreach (['ABC', 'abc_def', '1abc', 'abc.def', str_repeat('a', 33), 'abc/def'] as $context) {
+        foreach (['general', 'globals', 'ABC', 'abc_def', '1abc', 'abc.def', str_repeat('a', 33), 'abc/def'] as $context) {
             $this->post('/tenants', ['name' => 'Tenant', 'context' => $context, 'confirm_context_ownership' => 1])->assertSessionHasErrors('context');
         }
         $this->post('/tenants', ['name' => 'Tenant', 'context' => 'abc'])->assertSessionHasErrors('confirm_context_ownership');

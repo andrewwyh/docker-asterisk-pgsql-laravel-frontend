@@ -13,6 +13,8 @@ services:
       - ./tests/fixtures/02-tenants.sql:/docker-entrypoint-initdb.d/02-tenants.sql:ro
       - ./tests/fixtures/03-writer.sql:/docker-entrypoint-initdb.d/03-writer.sql:ro
       - ./database/pjsip-writer-grants.sql:/opt/pjsip-writer-grants.sql:ro
+      - ./tests/fixtures/04-dialplan.sql:/docker-entrypoint-initdb.d/04-dialplan.sql:ro
+      - ./database/dialplan-grants.sql:/opt/dialplan-grants.sql:ro
     healthcheck:
       test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U fixture -d realtime_fixture]
       interval: 2s
