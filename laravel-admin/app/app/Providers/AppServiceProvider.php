@@ -20,6 +20,13 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen(ConnectionEstablished::class, function (ConnectionEstablished $event): void {
+            if ($event->connection->getName() === 'dialplan_write') {
+                if (! config('realtime.enabled') || ! config('realtime.dialplan_writes_enabled')) {
+                    throw new LogicException('Dialplan management is disabled.');
+                }
+                $event->connection->disableQueryLog();
+            }
+
             if ($event->connection->getName() === 'asterisk_write') {
                 if (! config('realtime.enabled') || ! config('realtime.writes_enabled')) {
                     throw new LogicException('PBX writes are disabled.');

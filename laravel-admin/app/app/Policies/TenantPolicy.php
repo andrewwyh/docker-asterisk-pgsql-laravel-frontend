@@ -27,6 +27,11 @@ class TenantPolicy
         return $this->update($user, $tenant);
     }
 
+    public function manageDialplan(User $user, Tenant $tenant): bool
+    {
+        return $this->update($user, $tenant);
+    }
+
     public function manageMembers(User $user, Tenant $tenant): bool
     {
         return $user->is_platform_admin;

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DialplanController;
 use App\Http\Controllers\PjsipController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantInventoryController;
@@ -26,6 +27,16 @@ Route::middleware('auth')->group(function (): void {
         Route::patch('/{record}', [PjsipController::class, 'update'])->name('pjsip.update');
         Route::get('/{record}/delete', [PjsipController::class, 'delete'])->name('pjsip.delete');
         Route::delete('/{record}', [PjsipController::class, 'destroy'])->name('pjsip.destroy');
+    });
+    Route::prefix('/tenants/{tenant}/dialplan')->group(function (): void {
+        Route::get('/', [DialplanController::class, 'index'])->name('dialplan.index');
+        Route::get('/create', [DialplanController::class, 'create'])->name('dialplan.create');
+        Route::post('/', [DialplanController::class, 'submit'])->name('dialplan.store');
+        Route::post('/provision', [DialplanController::class, 'provision'])->name('dialplan.provision');
+        Route::get('/{extension}/edit', [DialplanController::class, 'edit'])->whereNumber('extension')->name('dialplan.edit');
+        Route::post('/{extension}', [DialplanController::class, 'submit'])->whereNumber('extension')->name('dialplan.update');
+        Route::get('/{extension}/delete', [DialplanController::class, 'delete'])->whereNumber('extension')->name('dialplan.delete');
+        Route::delete('/{extension}', [DialplanController::class, 'destroy'])->whereNumber('extension')->name('dialplan.destroy');
     });
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });

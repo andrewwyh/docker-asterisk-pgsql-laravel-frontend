@@ -1,6 +1,6 @@
 # Independent Asterisk administration
 
-Phase 4 administration: Laravel 13, PHP 8.5, nginx, administrator authentication, and health checks. Tenant workspaces, scoped inventory, and tenant-aware PJSIP CRUD are available. Dialplan routing and trunks are later phases. No changes to the parent PBX deployment are required.
+Tenant administration and Realtime dialplan: Laravel 13, PHP 8.5, nginx, administrator authentication, and health checks. Tenant workspaces, scoped PJSIP CRUD, tenant-local numbering, and managed Realtime dialplan editing are available. External SIP trunks remain a later phase. No changes to the parent PBX deployment are required.
 
 ## First start
 
@@ -82,7 +82,7 @@ This can recreate PostgreSQL; Asterisk's existing loopback publication is retain
 
 ## Remaining phases
 
-Realtime context routing, dialplan management, and external trunks remain. Inventory remains read-only; provisioning uses a separately enabled writer connection.
+External SIP trunks and advanced routing remain. Inventory remains read-only; provisioning uses a separately enabled writer connection.
 
 ## Phase 4: PJSIP management
 
@@ -94,7 +94,7 @@ After changing the environment or image, run `docker compose build app web` and 
 
 ### Create and edit
 
-Open a tenant workspace, then **Endpoints → Create SIP account**. A numeric local extension such as `100` becomes `100_abc` in context `abc`. Leading zeroes are preserved. The combined identity is capped at 40 characters, matching the existing authentication username column. An endpoint, userpass authentication record, and AOR are created in one PostgreSQL transaction. Configure the phone's SIP identity and authentication username with the full suffixed ID. No dialplan rows or context wiring are added, so tenant-local dialing remains a later phase.
+Open a tenant workspace, then **Endpoints → Create SIP account**. A numeric local extension such as `100` becomes `100_abc` in context `abc`. Leading zeroes are preserved. The combined identity is capped at 40 characters, matching the existing authentication username column. An endpoint, userpass authentication record, and AOR are created in one PostgreSQL transaction. Configure the phone's SIP identity and authentication username with the full suffixed ID. Account creation itself does not add dialplan rows. Use the tenant dialplan page to provision local routes, then synchronize newly introduced contexts on the PBX host.
 
 Authentication and AOR pages also have creation forms. A new record must be attached to an existing endpoint in the same tenant; creation and reference addition occur in the same transaction. Record names receive the tenant suffix. New auths use userpass; a blank username uses the generated auth ID. This keeps ownership explicit without adding a PBX schema or creating unattached records. Orphan/shared records are outside these tenant workflows.
 
@@ -119,3 +119,31 @@ On the administration host, run `tailscale serve --bg --https=443 http://127.0.0
 Set TRUSTED_PROXIES to the gateway IP of the administration Docker network (find it with `docker network inspect asterisk-admin_admin`). Host-originated proxy traffic reaches nginx from this gateway. Laravel trusts X-Forwarded-Proto and X-Forwarded-For only from the configured addresses, and does not trust forwarded host headers. Update the setting if the network is recreated with a different subnet. For a different reverse-proxy topology, configure the actual source addresses instead of trusting all clients.
 
 Rebuild app/web after code changes and recreate both services after environment changes. Use `tailscale serve status` to find the HTTPS URL. If a foreground Serve command already owns port 443, stop it with Ctrl-C before starting the background command. No Tailscale Funnel configuration is needed.
+
+## Tenant-local dialing and the managed dialplan
+
+Open **Tenants → workspace → Dialplan**. Viewers can list routes; platform and tenant administrators can preview and manage routes when DIALPLAN_WRITES_ENABLED=true. Numeric extensions keep their leading zeros. The editor supports Answer, Wait, Playback, Echo, Dial, and Hangup, with up to 20 priorities. Add/remove/reorder steps, preview the exact compiled applications and arguments, then explicitly approve the save. Replacing priorities is one PostgreSQL transaction, avoiding intermediate uniqueness conflicts. Deletion requires typing the extension and checking confirmation. Encrypted route snapshots detect stale edits, deletion/recreation, and cross-tenant token reuse.
+
+Dial destinations must be endpoints in the current tenant context. The server generates `Dial(PJSIP/endpoint,timeout,i)` with a bounded timeout and no user-controlled Dial options; the i option ignores endpoint forwarding requests. Playback is restricted to DIALPLAN_PLAYBACK_PROMPTS (default hello-world), Wait is bounded to 30 seconds, and raw applications, variables, URIs, paths, and cross-context calls are not accepted. Every managed route ends in Hangup. Existing unsupported routes/patterns remain in the database; they are read-only in this editor, and their raw arguments are not displayed. Advanced patterns and trunks need a future dedicated workflow.
+
+**Provision missing routes** creates routes for canonical numeric endpoint IDs in that tenant: `100_abc` becomes extension `100` in context abc. It also supplies 200 (Answer/Echo/Hangup) and 201 (Answer/Wait/Playback hello-world/Hangup). Existing extensions are preserved in their entirety. Repeating provisioning does not create duplicates. Numbers 200 and 201 are reserved for tests by this provisioning action, so endpoints with those local numbers are not auto-routed. Legacy unsuffixed endpoints are not renamed or guessed; create an explicit tenant-local Dial route for them if needed.
+
+### Dialplan database access
+
+Configure a separate non-superuser login through REALTIME_DIALPLAN_DB_USERNAME and REALTIME_DIALPLAN_DB_PASSWORD, then apply `database/dialplan-grants.sql` as the PBX database owner with psql variables reader_role and dialplan_role. The role receives SELECT/DELETE and limited INSERT on extensions, USAGE on its existing sequence, and SELECT on endpoint IDs/contexts. It receives no PJSIP mutation or schema-creation privileges. The inventory reader gains only the columns needed to list routes, not appdata or credentials. The PJSIP writer still cannot modify extensions. Set DIALPLAN_WRITES_ENABLED=true and recreate the administration containers after configuration. No database schema migrations are required.
+
+PJSIP and dialplan mutations share a database advisory transaction lock before their table locks. This coordinates account deletion and route creation through the application; external SQL tools must coordinate separately. Audit intent/outcome semantics are the same as PJSIP changes, with no raw route arguments in audit records. PostgreSQL roles are not a replacement for tenant policies or database row-level security.
+
+### Activate additional contexts on the PBX host
+
+The remote Laravel deployment does not mount Asterisk configuration, control Docker, or reload Asterisk. After creating routes or endpoints for a new context, run on the PBX host:
+
+```sh
+python3 asterisk/scripts/sync-realtime-contexts.py
+# Optional read-only check (exit 1 means regeneration is needed):
+python3 asterisk/scripts/sync-realtime-contexts.py --check
+```
+
+The script reads distinct endpoint/dialplan contexts through the existing PostgreSQL container, validates identifiers, preserves contexts already defined in extensions.conf, atomically writes the ignored realtime-contexts.conf include, and reloads only the dialplan. The existing default and abc mappings are retained. Generated contexts must be regenerated on another PBX host; they are runtime state rather than committed tenant data. Context names general/globals are reserved. Provisioning a tenant's routes before synchronization ensures its context exists in PostgreSQL. Existing activated contexts use changed Realtime routes without a reload. No SIP reload or container restart is needed.
+
+For the initial demo routes alone, `postgres/init/02-test-extensions.sql` is also safe to apply to an existing database; it preserves existing extension numbers. New installations load it after the schema initialization script.
