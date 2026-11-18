@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Services\PjsipManager;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use PDOException;
@@ -30,11 +31,13 @@ class PjsipController extends Controller
         return redirect()->route('pjsip.edit', [$tenant, $resource, $id])->with('status', 'PBX records created. No dialplan routes were added.');
     }
 
-    public function edit(Tenant $tenant, string $resource, string $record, PjsipManager $manager): View
+    public function edit(Tenant $tenant, string $resource, string $record, PjsipManager $manager): View|Response
     {
-        $entity = $manager->record($tenant, $resource, $record);
+        $entity = $manager->record($tenant, $resource, $record, includePassword: true);
 
-        return view('pjsip.form', ['tenant' => $tenant, 'resource' => $resource, 'record' => $entity, 'token' => $manager->token($tenant, $resource, $entity), 'endpoints' => []]);
+        $form = view('pjsip.form', ['tenant' => $tenant, 'resource' => $resource, 'record' => $entity, 'token' => $manager->token($tenant, $resource, $entity), 'endpoints' => []]);
+
+        return $resource === 'auths' ? response($form)->header('Cache-Control', 'private, no-store') : $form;
     }
 
     public function update(PjsipRequest $request, Tenant $tenant, string $resource, string $record, PjsipManager $manager): RedirectResponse

@@ -147,3 +147,65 @@ python3 asterisk/scripts/sync-realtime-contexts.py --check
 The script reads distinct endpoint/dialplan contexts through the existing PostgreSQL container, validates identifiers, preserves contexts already defined in extensions.conf, atomically writes the ignored realtime-contexts.conf include, and reloads only the dialplan. The existing default and abc mappings are retained. Generated contexts must be regenerated on another PBX host; they are runtime state rather than committed tenant data. Context names general/globals are reserved. Provisioning a tenant's routes before synchronization ensures its context exists in PostgreSQL. Existing activated contexts use changed Realtime routes without a reload. No SIP reload or container restart is needed.
 
 For the initial demo routes alone, `postgres/init/02-test-extensions.sql` is also safe to apply to an existing database; it preserves existing extension numbers. New installations load it after the schema initialization script.
+
+## Flyingvoice FIP10P provisioning
+
+Open **Tenants → workspace → Phones**. Viewers can list phones. Tenant and platform administrators can add, edit, remove, and reboot phones. Each record links one handset MAC address to an existing PJSIP endpoint in that tenant's context. Enable the existing read-only Realtime inventory before adding phones. Use a dedicated endpoint and AoR with one contact per handset. Asterisk sends the reboot request to every contact on the selected endpoint.
+
+1. Back up the Laravel SQLite database and application key. Rebuild and apply the SQLite migration.
+
+   ```sh
+   docker compose build app web
+   docker compose run --rm app initialize
+   docker compose up -d app web
+   ```
+
+2. Set `PHONE_PROVISIONING_URL` in the administration `.env` to an HTTPS origin reachable by the handset, or use the existing `APP_URL` if it is already reachable. A phone at a remote site needs a route to this origin through its site network or VPN. A Tailscale Serve URL needs a tailnet route from that network. If there is another reverse proxy, exclude `/provision/` URLs from request logging because the URL acts as a credential.
+
+3. Add a phone and upload its firmware-compatible provisioning file. Laravel serves the uploaded XML or CFG bytes and encrypts the contents in SQLite. The file must contain the settings for that handset, including the SIP settings if it needs initial registration. Use a vendor template matching your firmware. Flyingvoice's general provisioning guide documents CFG for account settings, so use CFG unless the installed firmware supports the XML profile you are uploading. [Flyingvoice provisioning guide](https://www.flyingvoice.com/Uploads/detail/2024-11-05/Flyingvoice%20Phones%20Auto%20Provisoning%20Guide.pdf)
+
+4. On the handset, open **Administration → Provision**. Enable provisioning and **Resync from SIP**, where shown. Paste the entire Profile URL from **Edit and setup** into **Profile Rule**, then choose **Save & Apply**. Confirm the profile is applied and the endpoint is registered. Changing the MAC address, endpoint, or file extension changes the URL. Removing the record disables the URL.
+
+5. For the Reboot button, configure a dedicated AMI account on the same Asterisk instance used for Realtime inventory. Load `res_pjsip_notify` and restrict the manager listener and account ACL to the administration app's private network address. Use no event read permissions and the `system` write privilege required for `PJSIPNotify`. Set `PHONE_AMI_ADDRESS` (for example `tcp://pbx.internal:5038` over Tailscale), `PHONE_AMI_USERNAME`, and `PHONE_AMI_SECRET` in the administration `.env`, then recreate the app container. [Asterisk PJSIPNotify documentation](https://docs.asterisk.org/Asterisk_20_Documentation/API_Documentation/AMI_Actions/PJSIPNotify/)
+
+6. Click **Reboot** and check that the handset restarts and registers again. This uses Flyingvoice's `check-sync;reboot=true` SIP notification through the endpoint's registered contact. Remote phones need a working SIP return path from Asterisk. The dashboard reports whether Asterisk accepted the action. Confirm the reboot on the handset.
+
+### Per-phone Profile URL
+
+In **Phones → Edit and setup**, Profile URL is editable and saved with **Save phone**. Set an HTTP/HTTPS host, port, and optional proxy prefix reachable from that handset while retaining the generated `/provision/...` token/filename suffix. Clearing the field restores PHONE_PROVISIONING_URL or APP_URL. The per-phone base override is encrypted in SQLite; the full credential-bearing URL is not flashed after validation errors. Existing profiles and tokens are preserved, and later MAC/endpoint/format changes regenerate the managed path using the saved base. Apply the additional SQLite migration during deployment. Changing the field does not create a listener, configure DNS/proxying, or apply settings to the handset automatically.
+
+### AMI/notifier setup required for Reboot
+
+Provisioning downloads and SIP registration do not require AMI. The Reboot button does. New installations require manual setup: `manager.conf.example` is not loaded automatically and has AMI disabled by default. No reusable secret is supplied.
+
+1. On the PBX host, create the private configuration file:
+
+   ```sh
+   cp asterisk/config/manager.conf.example asterisk/config/manager.conf
+   ```
+
+   Use this only for a new installation; preserve any existing `manager.conf`.
+
+2. **Generate your own secret** in your local terminal:
+
+   ```sh
+   python3 -c 'import secrets; print(secrets.token_hex(32))'
+   ```
+
+   Put the generated value in `secret` under `[phone-provisioning]` in the private PBX `manager.conf`, and use that same value for `PHONE_AMI_SECRET` in the administration host's private `laravel-admin/.env`. Generate a separate secret for each deployment. Keep the tracked example files as placeholders.
+
+3. Replace `REPLACE_WITH_PBX_TAILSCALE_IP` with the PBX's private Tailscale address. Replace `REPLACE_WITH_ADMIN_SOURCE_IP` with the administration client's actual source address: the app container IP on this same host, or the remote administration host's Tailscale IP. Recheck the ACL if that address changes. Bind AMI to this specific private interface, not a public/wildcard interface.
+
+4. After replacing every placeholder, set `enabled = yes`. Ensure the Asterisk container user can read `manager.conf` without making it world-readable. The actual `manager.conf` and administration `.env` are gitignored and must not be committed.
+
+`asterisk/config/pjsip_notify.conf` must also exist: without it, res_pjsip_notify can decline to load and PJSIPNotify will be unavailable. The included Flyingvoice option escapes the semicolon in the Asterisk configuration file. Laravel supplies the raw `Event=check-sync;reboot=true` value through AMI.
+
+Apply the PBX configuration without restarting SIP:
+
+```sh
+docker compose exec -T asterisk asterisk -rx 'manager reload'
+docker compose exec -T asterisk asterisk -rx 'module load res_pjsip_notify.so'
+docker compose exec -T asterisk asterisk -rx 'module show like res_pjsip_notify'
+```
+
+Set PHONE_AMI_ADDRESS to `tcp://<PBX-Tailscale-IP>:5038`, PHONE_AMI_USERNAME to the dedicated account name, and PHONE_AMI_SECRET to the matching secret in the administration host's private .env, then recreate app/web. Setting those environment variables alone does not enable AMI in Asterisk. The account requires system write permission for PJSIPNotify and no event read permissions. Confirm a successful action on the handset; AMI acceptance alone is not proof of a completed reboot.
