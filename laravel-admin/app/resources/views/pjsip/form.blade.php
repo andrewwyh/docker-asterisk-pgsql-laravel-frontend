@@ -38,11 +38,14 @@
 <input id="{{ $field }}" name="{{ $field }}" type="{{ in_array($field, $numberFields, true) ? 'number' : 'text' }}" @if(in_array($field, $numberFields, true)) step="{{ $field === 'qualify_timeout' ? '0.1' : '1' }}" @else maxlength="{{ ['username' => 40, 'realm' => 255, 'callerid' => 40, 'allow' => 200, 'disallow' => 200][$field] ?? 255 }}" @endif value="{{ $value }}">
 @endif
 @endforeach
-@if($resource === 'auths' || (!$record && $resource === 'endpoints'))
-@if(!$record || $resource !== 'auths' || $record->auth_type === 'userpass')
-<label for="password">{{ $record ? 'Replacement SIP password' : 'SIP password' }}</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="80" @required(!$record)>
-<label for="password_confirmation">Confirm SIP password</label><input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" maxlength="80" @required(!$record)>
-<p class="muted">{{ $record ? 'Leave both password fields blank to preserve the existing credential.' : 'Use 12–80 characters. The password is stored in the format required by Asterisk.' }}</p>
+@if(!$record && in_array($resource, ['auths', 'endpoints'], true))
+<label for="password">SIP password</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="80" required>
+<label for="password_confirmation">Confirm SIP password</label><input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" maxlength="80" required>
+<p class="muted">Use 12–80 characters. The password is stored in the format required by Asterisk.</p>
+@elseif($record && $resource === 'auths')
+@if($record->auth_type === 'userpass')
+<label for="password">SIP password</label><input id="password" name="password" type="text" value="{{ $record->password }}" autocomplete="off" spellcheck="false" autocapitalize="off">
+<p class="muted">Use 12–80 characters for a new password. Leave this field blank to keep the current password.</p>
 @else<p class="muted">Credential replacement for this authentication type requires a dedicated workflow. Existing credentials are preserved.</p>@endif
 @endif
 <p class="muted">Blank optional settings use the PBX default. Unlisted settings are preserved. Configure codecs and transport names to match the PBX.</p>
