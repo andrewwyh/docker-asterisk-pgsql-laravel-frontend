@@ -1,0 +1,17 @@
+services:
+  phppgadmin:
+    image: ivoras/phppgadmin:latest@sha256:827f14ec2230b5e2f83d3398514f62a95f405d702a4634f938e2bc22600eb189
+    restart: always
+    ports:
+      - "0.0.0.0:82:80"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    networks:
+      - postgres
+
+networks:
+  postgres:
+    external: true
+    # Start the main stack first. Override this if its Compose project name differs.
+    name: ${POSTGRES_DOCKER_NETWORK:-asterisk-pgsql-2026-2_default}
