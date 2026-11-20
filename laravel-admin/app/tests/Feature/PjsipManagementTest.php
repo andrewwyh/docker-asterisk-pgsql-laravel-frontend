@@ -138,6 +138,7 @@ class PjsipManagementTest extends TestCase
         $this->assertSame('00201_abc', $id);
         $endpoint = $db->table('ps_endpoints')->where('id', $id)->first();
         $this->assertSame('abc', $endpoint->context);
+        $this->assertSame('auth_username', $endpoint->identify_by);
         $this->assertSame($id, $endpoint->auth);
         $this->assertSame($id, $endpoint->aors);
         $this->assertSame('<00201>', $endpoint->callerid);

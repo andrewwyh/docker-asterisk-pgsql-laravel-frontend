@@ -144,7 +144,9 @@ class PjsipManager
                 if ($endpoint['callerid'] === null) {
                     $endpoint['callerid'] = '<'.$input['resource_key'].'>';
                 }
-                $this->db()->table('ps_endpoints')->insert(['id' => $id, 'context' => $tenant->context, 'auth' => $id, 'aors' => $id] + $endpoint);
+                $this->db()->table('ps_endpoints')->insert([
+                    'id' => $id, 'context' => $tenant->context, 'auth' => $id, 'aors' => $id, 'identify_by' => 'auth_username',
+                ] + $endpoint);
             } else {
                 $endpoint = $this->db()->table('ps_endpoints')->where('id', $input['endpoint_id'])->where('context', $tenant->context)->firstOrFail();
                 $field = $resource === 'auths' ? 'auth' : 'aors';
