@@ -53,11 +53,17 @@ sudo chown "$pbx_uid:$pbx_gid" data/asterisk/{lib,log,spool}
 sudo chgrp "$pbx_gid" asterisk/config/res_pgsql.conf
 chmod 640 asterisk/config/res_pgsql.conf
 
+docker run --rm --user 0 --entrypoint cp \
+  --mount "type=bind,src=$PWD/data/asterisk/lib,dst=/pbx-data" \
+  local/asterisk:22.11.0 -R /var/lib/asterisk/documentation /pbx-data/
+
 docker compose up -d
 docker compose ps
 docker compose logs --tail=80 postgres asterisk
 docker compose exec -T asterisk asterisk -rx 'realtime pgsql status'
 ```
+
+The host bind mount hides the XML documentation installed in the image. The `docker run` command copies it from the built image into the mounted directory so Stasis can start. Use the image tag matching `ASTERISK_VERSION`. If Asterisk is already restarting with `Stasis initialization failed` and missing XML documentation messages, run the same copy command from the repo root, then run `docker compose restart asterisk`. Repeat the copy after rebuilding with a new Asterisk version. [Asterisk XML documentation loader](https://github.com/asterisk/asterisk/blob/22.11.0/main/xmldoc.c)
 
 PostgreSQL initializes the Realtime schema and creates test routes `200` (echo) and `201` (playback) in `default` and `abc` on the first start with an empty data directory. Create or restore SIP accounts before registering phones.
 
