@@ -60,7 +60,7 @@ docker run --rm --user 0 --entrypoint cp \
 docker compose up -d
 docker compose ps
 docker compose logs --tail=80 postgres asterisk
-docker compose exec -T asterisk asterisk -rx 'realtime pgsql status'
+docker compose exec -T asterisk asterisk -rx 'realtime show pgsql status'
 ```
 
 The host bind mount hides the XML documentation installed in the image. The `docker run` command copies it from the built image into the mounted directory so Stasis can start. Use the image tag matching `ASTERISK_VERSION`. If Asterisk is already restarting with `Stasis initialization failed` and missing XML documentation messages, run the same copy command from the repo root, then run `docker compose restart asterisk`. Repeat the copy after rebuilding with a new Asterisk version. [Asterisk XML documentation loader](https://github.com/asterisk/asterisk/blob/22.11.0/main/xmldoc.c)
