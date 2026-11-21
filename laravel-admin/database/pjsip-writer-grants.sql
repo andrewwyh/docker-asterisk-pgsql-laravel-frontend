@@ -3,7 +3,7 @@
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'writer_role') \gexec
 GRANT USAGE ON SCHEMA public TO :"writer_role";
 GRANT SELECT, DELETE ON ps_endpoints, ps_auths, ps_aors TO :"writer_role";
-GRANT INSERT (id, context, auth, aors, transport, "allow", disallow, callerid, direct_media, rtp_symmetric, force_rport, rewrite_contact) ON ps_endpoints TO :"writer_role";
+GRANT INSERT (id, context, auth, aors, identify_by, transport, "allow", disallow, callerid, direct_media, rtp_symmetric, force_rport, rewrite_contact) ON ps_endpoints TO :"writer_role";
 GRANT UPDATE (auth, outbound_auth, aors, transport, "allow", disallow, callerid, direct_media, rtp_symmetric, force_rport, rewrite_contact) ON ps_endpoints TO :"writer_role";
 GRANT INSERT (id, auth_type, username, password, realm) ON ps_auths TO :"writer_role";
 GRANT UPDATE (username, realm, password, md5_cred, password_digest) ON ps_auths TO :"writer_role";

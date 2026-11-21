@@ -90,6 +90,8 @@ Inventory continues using `asterisk`, with its column-restricted reader role. Co
 
 The writer can insert/delete the three PJSIP tables and update only the permitted columns; it cannot update endpoint IDs/contexts, change schema, edit the dialplan, or mutate runtime contacts. SELECT on the three tables supports PostgreSQL row-version checks; the application explicitly selects safe columns plus `xmin`, never stored credentials. The separate inventory reader still cannot read credential columns. Writer queries and errors containing bound credentials are not logged or returned to the browser. Keep debug tooling and SQL query logging disabled on credential workflows.
 
+Add Endpoint writes `identify_by=auth_username`. Before deploying this version, reapply `database/pjsip-writer-grants.sql` for the configured writer role to grant INSERT on the new column used by the app. As the PBX database owner, also run `database/pjsip-backfill-identify-by.sql` once with `psql -v ON_ERROR_STOP=1` against the PBX database. It sets `identify_by=auth_username` for all existing endpoints, including rows with another identification method.
+
 After changing the environment or image, run `docker compose build app web` and `docker compose up -d --force-recreate app web`. Existing application volumes and sessions are retained. There are no Phase 4 database schema migrations.
 
 ### Create and edit
