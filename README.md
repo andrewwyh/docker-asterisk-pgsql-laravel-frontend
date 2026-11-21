@@ -100,18 +100,64 @@ docker compose up -d --force-recreate app web
 curl -fsS http://127.0.0.1:8080/up
 ```
 
-## 4. Connect Laravel to the PBX
+### Connect Laravel to the PBX for read-only inventory
 
-1. From the repo root, set `PBX_PRIVATE_BIND_ADDRESS` in the root `.env` to a private address on the PBX host that the admin container can reach, such as the host's Tailscale IPv4. Restrict TCP `5432` to the admin connection path. Apply the private publication below. This may recreate PostgreSQL. Continue using both root Compose files for subsequent PBX operations to retain the private binding.
+From the repo root, open `psql` as the PostgreSQL account configured in the root `.env`.
 
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.remote.yml \
-     up -d --no-deps postgres
-   ```
+```bash
+docker compose exec postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
 
-2. Create a dedicated PostgreSQL login for inventory. Use the reader grants in [`02-tenants.sql`](laravel-admin/tests/fixtures/02-tenants.sql) as a template, substituting your actual role and database names. In `laravel-admin/.env`, set `REALTIME_ENABLED=true` and fill in `REALTIME_DB_HOST`, `REALTIME_DB_DATABASE`, `REALTIME_DB_USERNAME`, and `REALTIME_DB_PASSWORD`. Set the host to the private address used above.
-3. To create SIP accounts and edit dialplans through the UI, create separate restricted logins and apply [the PJSIP writer grants](laravel-admin/database/pjsip-writer-grants.sql) and [the dialplan grants](laravel-admin/database/dialplan-grants.sql). Follow the [admin README](laravel-admin/README.md) for the role variables, feature flags, and the `identify_by` backfill for existing endpoints. After editing `.env`, run `docker compose up -d --force-recreate app web` from `laravel-admin`.
-4. Register a tenant in the UI, then create a SIP account and routes. When you introduce a new tenant context, run `python3 asterisk/scripts/sync-realtime-contexts.py` from the PBX repo root. Confirm the inventory connection from the dashboard, then verify registration and calling from a handset.
+At the `psql` prompt, create the inventory role and grant access to the required columns. Replace `asterisk` in the database grant if you chose a different database name. If the role already exists, skip `CREATE ROLE`. The `\password` command prompts for the password twice. Each successful grant prints `GRANT`.
+
+```sql
+CREATE ROLE laravel_readonly LOGIN;
+\password laravel_readonly
+
+GRANT CONNECT ON DATABASE asterisk TO laravel_readonly;
+GRANT USAGE ON SCHEMA public TO laravel_readonly;
+
+GRANT SELECT (id, context, transport, auth, outbound_auth, aors, "allow", callerid)
+    ON public.ps_endpoints TO laravel_readonly;
+
+GRANT SELECT (id, auth_type, username, realm)
+    ON public.ps_auths TO laravel_readonly;
+
+GRANT SELECT (id, max_contacts, default_expiration, maximum_expiration, qualify_frequency)
+    ON public.ps_aors TO laravel_readonly;
+
+ALTER ROLE laravel_readonly SET default_transaction_read_only = on;
+\q
+```
+
+Set `PBX_PRIVATE_BIND_ADDRESS` in the root `.env` to a private IP on the PBX host that the admin container can reach. Run `tailscale ip -4` on the PBX host if you use its Tailscale address. Restrict TCP `5432` to the admin connection path. From the repo root, apply the private publication and check the port mappings.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote.yml up -d --no-deps postgres
+docker compose -f docker-compose.yml -f docker-compose.remote.yml ps postgres
+```
+
+PostgreSQL may be recreated. The `PORTS` column should show both the loopback and private IP on port `5432`. Use both root Compose files for subsequent PBX operations to retain the private binding.
+
+Update `laravel-admin/.env` with the private IP you just used, the database name, and the password you set for `laravel_readonly`.
+
+```dotenv
+REALTIME_ENABLED=true
+REALTIME_DB_HOST=YOUR_PBX_PRIVATE_IP
+REALTIME_DB_PORT=5432
+REALTIME_DB_DATABASE=asterisk
+REALTIME_DB_USERNAME=laravel_readonly
+REALTIME_DB_PASSWORD='YOUR_INVENTORY_PASSWORD'
+REALTIME_WRITES_ENABLED=false
+DIALPLAN_WRITES_ENABLED=false
+```
+
+From `laravel-admin`, run `docker compose up -d --force-recreate app web`. Sign in and check the dashboard. **“PBX connection is read-only”** confirms Laravel can connect with the inventory role. The `/up` endpoint checks Laravel itself.
+
+## 4. Enable SIP account and dialplan management
+
+1. Create separate restricted logins and apply [the PJSIP writer grants](laravel-admin/database/pjsip-writer-grants.sql) and [the dialplan grants](laravel-admin/database/dialplan-grants.sql). Follow the [admin README](laravel-admin/README.md) for the role variables, feature flags, and the `identify_by` backfill for existing endpoints. After editing `.env`, run `docker compose up -d --force-recreate app web` from `laravel-admin`.
+2. Register a tenant in the UI, then create a SIP account and routes. When you introduce a new tenant context, run `python3 asterisk/scripts/sync-realtime-contexts.py` from the PBX repo root. Verify registration and calling from a handset.
 
 For phone profile downloads or the handset **Reboot** button, follow the [phone provisioning and AMI setup](laravel-admin/README.md#flyingvoice-fip10p-provisioning). Reboot requires a dedicated AMI account and a private listener on TCP `5038`. phpPgAdmin is optional. Its [Compose file](phppgaadmin/compose.yml) publishes port `82` on all interfaces by default. Change the binding to loopback or a private interface before starting it.
 
