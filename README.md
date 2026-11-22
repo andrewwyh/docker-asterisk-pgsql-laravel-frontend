@@ -156,8 +156,75 @@ From `laravel-admin`, run `docker compose up -d --force-recreate app web`. Sign 
 
 ## 4. Enable SIP account and dialplan management
 
-1. Create separate restricted logins and apply [the PJSIP writer grants](laravel-admin/database/pjsip-writer-grants.sql) and [the dialplan grants](laravel-admin/database/dialplan-grants.sql). Follow the [admin README](laravel-admin/README.md) for the role variables, feature flags, and the `identify_by` backfill for existing endpoints. After editing `.env`, run `docker compose up -d --force-recreate app web` from `laravel-admin`.
-2. Register a tenant in the UI, then create a SIP account and routes. When you introduce a new tenant context, run `python3 asterisk/scripts/sync-realtime-contexts.py` from the PBX repo root. Verify registration and calling from a handset.
+Enable either feature independently. Keep the inventory login from section 3 configured. Run the PostgreSQL commands from the repo root on the PBX host.
+
+### Create the writer logins
+
+Open `psql` as the PBX database owner.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote.yml exec postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+At the `psql` prompt, run the statements for the features you want. Skip `CREATE ROLE` for an existing writer login. Each `\password` command prompts twice. Use a separate password for each login, then type `\q` to return to the shell.
+
+```sql
+CREATE ROLE laravel_pjsip_writer LOGIN;
+\password laravel_pjsip_writer
+
+CREATE ROLE laravel_dialplan_writer LOGIN;
+\password laravel_dialplan_writer
+```
+
+### Enable PJSIP account management
+
+Apply the [PJSIP writer grants](laravel-admin/database/pjsip-writer-grants.sql).
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote.yml exec -T postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v writer_role=laravel_pjsip_writer --single-transaction -f -' \
+  < laravel-admin/database/pjsip-writer-grants.sql
+```
+
+If you migrated existing endpoints, review the [`identify_by` backfill](laravel-admin/README.md#phase-4-pjsip-management) before applying it. It changes existing endpoints to use `auth_username`.
+
+Add these settings to `laravel-admin/.env` using the password you set for `laravel_pjsip_writer`.
+
+```dotenv
+REALTIME_WRITES_ENABLED=true
+REALTIME_WRITE_DB_USERNAME=laravel_pjsip_writer
+REALTIME_WRITE_DB_PASSWORD='YOUR_PJSIP_WRITER_PASSWORD'
+```
+
+### Enable dialplan editing
+
+Apply the [dialplan grants](laravel-admin/database/dialplan-grants.sql). If your inventory role has a different name, substitute it in `reader_role=`.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote.yml exec -T postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v reader_role=laravel_readonly -v dialplan_role=laravel_dialplan_writer --single-transaction -f -' \
+  < laravel-admin/database/dialplan-grants.sql
+```
+
+Add these settings to `laravel-admin/.env` using the password you set for `laravel_dialplan_writer`.
+
+```dotenv
+DIALPLAN_WRITES_ENABLED=true
+REALTIME_DIALPLAN_DB_USERNAME=laravel_dialplan_writer
+REALTIME_DIALPLAN_DB_PASSWORD='YOUR_DIALPLAN_WRITER_PASSWORD'
+```
+
+### Apply and verify
+
+After applying the grants and updating the environment, recreate the admin containers from the repo root.
+
+```bash
+cd laravel-admin
+docker compose up -d --force-recreate app web
+```
+
+Sign in as a platform or tenant administrator and open a registered tenant. Check **Endpoints → Create SIP account** if you enabled the PJSIP writer, or **Dialplan** if you enabled dialplan editing. When you introduce a new tenant context, run `python3 asterisk/scripts/sync-realtime-contexts.py` from the PBX repo root. Verify registration and calling from a handset.
 
 For phone profile downloads or the handset **Reboot** button, follow the [phone provisioning and AMI setup](laravel-admin/README.md#flyingvoice-fip10p-provisioning). Reboot requires a dedicated AMI account and a private listener on TCP `5038`. phpPgAdmin is optional. Its [Compose file](phppgaadmin/compose.yml) publishes port `82` on all interfaces by default. Change the binding to loopback or a private interface before starting it.
 
